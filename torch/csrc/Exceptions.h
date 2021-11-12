@@ -2,12 +2,14 @@
 
 #include <exception>
 #include <string>
+#include <system_error>
 #include <memory>
 #include <queue>
 #include <mutex>
 
 #include <c10/util/Exception.h>
 #include <pybind11/pybind11.h>
+#include <torch/csrc/distributed/c10d/exception.h>
 #include <torch/csrc/THP_export.h>
 #include <torch/csrc/utils/auto_gil.h>
 #include <torch/csrc/jit/runtime/jit_exception.h>
@@ -77,6 +79,11 @@ static inline void PyErr_SetString(PyObject* type, const std::string& message) {
       PyErr_SetString(PyExc_NotImplementedError, torch::processErrorMsg(msg)); \
       retstmnt;                                                      \
     }                                                                \
+    catch (const c10d::TimeoutException& e) {                        \
+      auto msg = torch::processErrorMsg(e.what());                   \
+      PyErr_SetString(PyExc_TimeoutError, msg);                      \
+      retstmnt;                                                      \
+    }                                                                \
     catch (const c10::Error& e) {                                    \
       auto msg = torch::get_cpp_stacktraces_enabled() ?              \
                     e.what() : e.what_without_backtrace();           \
@@ -86,6 +93,11 @@ static inline void PyErr_SetString(PyObject* type, const std::string& message) {
     catch (torch::PyTorchError & e) {                                \
       auto msg = torch::processErrorMsg(e.what());                   \
       PyErr_SetString(e.python_type(), msg);                         \
+      retstmnt;                                                      \
+    }                                                                \
+    catch (const std::system_error& e) {                             \
+      errno = e.code().value();                                      \
+      PyErr_SetFromErrno(PyExc_OSError);                             \
       retstmnt;                                                      \
     }
 
